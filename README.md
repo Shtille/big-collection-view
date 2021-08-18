@@ -1,4 +1,6 @@
 # BigCollectionView
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FShtille%2Fbig-collection-view.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2FShtille%2Fbig-collection-view?ref=badge_shield)
+
 *BigCollectionView* is a simple Backbone-based analog of Marionette.CollectionView. But the last one renders entire collection while BigCollectionView renders only visible region.
 
 ## Dependencies
@@ -76,6 +78,9 @@ You can either use render() call or just simply attach this view as child view.
 
 ## License
 Distributed under the MIT License (license terms are at http://opensource.org/licenses/MIT).
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FShtille%2Fbig-collection-view.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FShtille%2Fbig-collection-view?ref=badge_large)
 
 ## Bug Reporting
 Please log bugs under [Issues](https://github.com/Shtille/big-collection-view/issues) on github.
