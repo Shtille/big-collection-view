@@ -1,22 +1,37 @@
 # BigCollectionView
 *BigCollectionView* is a simple Backbone-based analog of Marionette.CollectionView. But the last one renders entire collection while BigCollectionView renders only visible region.
 
+## Dependencies
+* [JQuery](https://jquery.com/)
+* [Underscore](https://underscorejs.org/)
+* [Backbone](https://backbonejs.org/)
+
+To start using big collection view you will need following modules:
+* _lru-cache.js_
+* _big-collection-view.js_
+
 ## Getting started
-1. Create model for collection item:
+1. Create scrollable container for list items:
+```html
+<div id="content" style="width: 500px; height: 200px;">
+    <div id="contentData" style="width: 100%; height: 100%; overflow-y: auto;"></div>
+</div>
+```
+2. Create model for collection item:
 ```javascript
 var Person = Backbone.Model.extend({
     name: null,
     age: null,
 });
 ```
-2. Define underscore template for list item:
+3. Define underscore template for list item:
 ```html
 <div>
     <div class='c-name'><%= name %></div>
     <div class='c-age'><%= age %></div>
 </div>
 ```
-3. Create view for list item:
+4. Create view for list item:
 ```javascript
 var ItemView = Backbone.View.extend({
     template: _.template( $('.person').text() ),
@@ -36,7 +51,7 @@ var ItemView = Backbone.View.extend({
 ```
 Note that element should have absolute position.
 
-4. Inherit list view class from *BigCollectionView*:
+5. Inherit list view class from *BigCollectionView*:
 ```javascript
 var ListView = BigCollectionView.extend({
 
@@ -52,7 +67,7 @@ var ListView = BigCollectionView.extend({
 
 });
 ```
-5. Use list view with previously created collection:
+6. Use list view with previously created collection:
 ```javascript
 var myList = new ListView({collection: myCollection});
 myList.render();
