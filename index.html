@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Big list view test</title>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+
+	<link rel="stylesheet" href="css/style.css">
+
+	<script src="lib/jquery.min.js"></script>
+	<script src="lib/underscore-umd-min.js"></script>
+	<script src="lib/backbone-min.js"></script>
+</head>
+
+<body>
+	<script class="person" type="text/underscore-template">
+		<div>
+			<div class='c-name'><%= name %></div>
+			<div class='c-age'><%= age %></div>
+		</div>
+	</script>
+	<div id="content" style="width: 500px; height: 200px;">
+		<div id="contentData" style="width: 100%; height: 100%; overflow-y: auto;"></div>
+	</div>
+</body>
+
+<script src="js/lru-cache.js"></script>
+<script src="js/big-collection-view.js"></script>
+<script src="js/models/person.js"></script>
+<script src="js/views/item-view.js"></script>
+<script src="js/views/list-view.js"></script>
+<script src="js/main.js"></script>
+
+</html>

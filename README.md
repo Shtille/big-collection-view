@@ -1,2 +1,2 @@
-# Backbone-BigListView
- Big list view based on Backbone library
+# BigCollectionView
+ Big collection view based on Backbone library.
