@@ -7,6 +7,7 @@
 * [JQuery](https://jquery.com/)
 * [Underscore](https://underscorejs.org/)
 * [Backbone](https://backbonejs.org/)
+* (Optional)[iScroll](https://iscrolljs.com/)
 
 To start using big collection view you will need following modules:
 * _lru-cache.js_
@@ -75,6 +76,33 @@ var myList = new ListView({collection: myCollection});
 myList.render();
 ```
 You can either use render() call or just simply attach this view as child view.
+
+## Cross-platform scrollbar
+iScroll library is used for adding a cross-platform scrollbar. By default it's disabled.
+To enable it you must do following changes:
+1. Change overflow for content data to hidden:
+```html
+<div id="content" style="width: 500px; height: 200px;">
+    <div id="contentData" style="width: 100%; height: 100%; overflow-y: hidden;"></div>
+</div>
+```
+2. Turn on _useIScroll_ flag in *BigCollectionView* successor:
+```javascript
+var ListView = BigCollectionView.extend({
+
+    containerSelectorName: '#contentData',
+    elementsOffset: 0,
+    estimatedItemHeight: 40,
+    useIScroll: true,
+
+    emptyView : null,
+    
+    childView : function(model){
+        return ItemView;
+    },
+
+});
+```
 
 ## License
 Distributed under the MIT License (license terms are at http://opensource.org/licenses/MIT).

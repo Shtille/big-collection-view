@@ -29,12 +29,18 @@ var BigCollectionView = Backbone.View.extend({
 			removeCallback: this._onIndexRemovedFromCache,
 		});
 		this._renderCallbackQueue = new Array();
+		this._scroll = null;
 
 		this.listenTo(this.collection, 'update', this._onCollectionChanged);
 		this.on({
 			'attach': this._onAttach.bind(this)
 		});
 	},
+
+	/**
+	 * Whether use IScroll plugin over default scrolling
+	 */
+	useIScroll: false,
 
 	/**
 	 * The name of container selector. Must be set.
@@ -142,8 +148,24 @@ var BigCollectionView = Backbone.View.extend({
 				break;
 			}
 		}
-		if (index != null) {
-			var position = index * this._getEstimatedElementHeightWithOffset();
+		this.scrollToElementByIndex(index, callback);
+	},
+
+	/**
+	 * Scrolls to desired element with the given index.
+	 * 
+	 * @param {Integer} index       The element index.
+	 * @param {Function} callback   The callback on animation complete. Optional.
+	 */
+	scrollToElementByIndex: function(index, callback) {
+		if (!index) return;
+		var position = index * this._getEstimatedElementHeightWithOffset();
+		if (this.useIScroll) {
+			this._scroll.scrollTo(0, -position);
+			this._requestFrame();
+			if (callback !== null && callback !== undefined)
+				callback.call(this);
+		} else {
 			$(this.containerSelectorName).animate({
 				scrollTop: position,
 			}, 400, 'swing', callback);
@@ -184,7 +206,6 @@ var BigCollectionView = Backbone.View.extend({
 
 		this.$el = $(this.containerSelectorName);
 		if (this.$el.length != 0) {
-			this.$el.scroll(this._onScroll.bind(this));
 			this.$el.css({'position': 'relative', 'width': '100%'});
 			this.$el.empty();
 
@@ -192,6 +213,21 @@ var BigCollectionView = Backbone.View.extend({
 			this._$content.css({'position': 'absolute', 'width': '100%'});
 			this.$el.append(this._$content);
 			this._$content.css('height', this.collection.length * this._getEstimatedElementHeightWithOffset());
+
+			if (this.useIScroll) {
+				this._scroll = new IScroll(this.containerSelectorName, {
+					probeType: 2,
+					scrollbars: true,
+					mouseWheel: true,
+					interactiveScrollbars: true,
+					shrinkScrollbars: 'scale',
+					// fadeScrollbars: true
+				});
+				this._scroll.on('scroll', this._onScroll.bind(this));
+			} else {
+				// Use default scroll
+				this.$el.scroll(this._onScroll.bind(this));
+			}
 
 			this._updateClientHeight();
 
@@ -278,7 +314,8 @@ var BigCollectionView = Backbone.View.extend({
 			this._createEmptyView();
 		} else {
 			this._updateClientHeight();
-			this._getVisibleItems(this.$el[0].scrollTop, this.$el[0].scrollHeight, this.$el[0].clientHeight);
+			var scrollTop = this.useIScroll ? (-this._scroll.y) : this.$el[0].scrollTop;
+			this._getVisibleItems(scrollTop, this.$el[0].scrollHeight, this.$el[0].clientHeight);
 			// Update visible items
 			for (var index = this._visibleItems[0]; index <= this._visibleItems[1]; ++index) {
 				// Refresh item by index

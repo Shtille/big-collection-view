@@ -9,3 +9,7 @@ for (var i = 0; i < count; ++i) {
 
 var myList = new ListView({collection: myCollection});
 myList.render();
+
+function onButtonClick() {
+	myList.scrollToElementByIndex(9);
+}

@@ -13,6 +13,7 @@ var ListView = BigCollectionView.extend({
 	containerSelectorName: '#contentData',
 	elementsOffset: 0,
 	estimatedItemHeight: 40,
+	useIScroll: true,
 
 	emptyView : null,
 	
