@@ -30,6 +30,7 @@ var BigCollectionView = Backbone.View.extend({
 		});
 		this._renderCallbackQueue = new Array();
 		this._scroll = null;
+		this._scrollRefreshRequested = false;
 
 		this.listenTo(this.collection, 'update', this._onCollectionChanged);
 		this.on({
@@ -101,7 +102,8 @@ var BigCollectionView = Backbone.View.extend({
 	updatePositions: function() {
 		if (this.collection.length == 0)
 			return;
-		var position, height, view;
+		var position, height, view, heightOverdraft;
+		heightOverdraft = 0;
 		for (var index = this._visibleItems[0]; index <= this._visibleItems[1]; ++index) {
 			view = this._views.get(index);
 			height = this._getElementHeightWithOffset(view.$el);
@@ -113,6 +115,12 @@ var BigCollectionView = Backbone.View.extend({
 				view.$el.css('top', position);
 			}
 			position += height;
+			heightOverdraft += height - this._getEstimatedElementHeightWithOffset();
+		}
+		if (this.useIScroll) {
+			this._$content.css('height', this.collection.length * this._getEstimatedElementHeightWithOffset() + heightOverdraft);
+			this._scrollRefreshRequested = true;
+			this._requestFrame();
 		}
 	},
 
@@ -162,9 +170,9 @@ var BigCollectionView = Backbone.View.extend({
 		var position = index * this._getEstimatedElementHeightWithOffset();
 		if (this.useIScroll) {
 			this._scroll.scrollTo(0, -position);
-			this._requestFrame();
 			if (callback !== null && callback !== undefined)
-				callback.call(this);
+				this.addRenderCompleteCallback(this, callback);
+			this._requestFrame();
 		} else {
 			$(this.containerSelectorName).animate({
 				scrollTop: position,
@@ -245,6 +253,7 @@ var BigCollectionView = Backbone.View.extend({
 			return;
 		this._clear();
 		this._$content.css('height', this.collection.length * this._getEstimatedElementHeightWithOffset());
+		this._scrollRefreshRequested = true;
 		this.render();
 	},
 
@@ -326,6 +335,10 @@ var BigCollectionView = Backbone.View.extend({
 					this._redrawItem(index);
 				}
 			}
+		}
+		if (this.useIScroll && this._scrollRefreshRequested) {
+			this._scrollRefreshRequested = false;
+			this._scroll.refresh();
 		}
 		this._forceRedraw = false;
 		this._fireRenderCompleteCallbacks();
