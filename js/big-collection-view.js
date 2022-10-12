@@ -31,8 +31,13 @@ var BigCollectionView = Backbone.View.extend({
 		this._renderCallbackQueue = new Array();
 		this._scroll = null;
 		this._scrollRefreshRequested = false;
+		this._isScrolling = false;
+		this._scrollEndTimer = null;
+		this._functionsQueue = new Array(); // render-based functions queue
+		this._isFunctionActive = false; // whether function in process
 
 		this.listenTo(this.collection, 'update', this._onCollectionChanged);
+		this.listenTo(this.collection, 'reset', this._onCollectionChanged);
 		this.on({
 			'attach': this._onAttach.bind(this)
 		});
@@ -62,6 +67,17 @@ var BigCollectionView = Backbone.View.extend({
 	 * Empty view class definition.
 	 */
 	emptyView: null,
+
+	/**
+	 * The scrollbar size changes based on the proportion between the wrapper 
+	 * and the scroller width/height. Setting this to false makes the scrollbar a fixed size.
+	 */
+	resizeScrollbars: true,
+
+	/**
+	 * Whether enable scroll end detection.
+	 */
+	enableScrollEnd: false,
 
 	/**
 	 * Child view class definition.
@@ -100,6 +116,15 @@ var BigCollectionView = Backbone.View.extend({
 	 * Should be called when one child changes its size.
 	 */
 	updatePositions: function() {
+		this._addFunctionRequest('_updatePositions');
+	},
+
+	/**
+	 * Updates all rendered nodes positions.
+	 * Should be called when one child changes its size.
+	 * @private
+	 */
+	_updatePositions: function() {
 		if (this.collection.length == 0)
 			return;
 		var position, height, view, heightOverdraft;
@@ -141,6 +166,15 @@ var BigCollectionView = Backbone.View.extend({
 	},
 
 	/**
+	 * Checks if we are scrolling right now.
+	 * 
+	 * @return True if scrolling and false otherwise.
+	 */
+	isScrolling: function() {
+		return this._isScrolling;
+	},
+
+	/**
 	 * Scrolls to desired element with the given model ID.
 	 * Complexity: O(N), where N is collection length.
 	 * 
@@ -166,7 +200,18 @@ var BigCollectionView = Backbone.View.extend({
 	 * @param {Function} callback   The callback on animation complete. Optional.
 	 */
 	scrollToElementByIndex: function(index, callback) {
-		if (!index) return;
+		this._addFunctionRequest('_scrollToElementByIndex', index, callback);
+	},
+
+	/**
+	 * Scrolls to desired element with the given index.
+	 * 
+	 * @param {Integer} index       The element index.
+	 * @param {Function} callback   The callback on animation complete. Optional.
+	 * @private
+	 */
+	 _scrollToElementByIndex: function(index, callback) {
+		if (index === null) return;
 		var position = index * this._getEstimatedElementHeightWithOffset();
 		if (this.useIScroll) {
 			this._scroll.scrollTo(0, -position);
@@ -205,6 +250,40 @@ var BigCollectionView = Backbone.View.extend({
 	},
 
 	/**
+	 * Places render-dependent function call to queue.
+	 * So this function guarantees that next request is served only after render is complete.
+	 * @private
+	 */
+	_addFunctionRequest: function() {
+		const args = Array.from(arguments);
+		this._functionsQueue.push(args);
+		this._processFunctionRequest();// isFUnctionActive
+	},
+
+	/**
+	 * Processes first function request in the queue.
+	 * @private
+	 */
+	_processFunctionRequest: function() {
+		if (!this._isFunctionActive && this._functionsQueue.length > 0) {
+			this._isFunctionActive = true;
+			var request = this._functionsQueue.shift();
+			var args = request.splice(1);
+			this.addRenderCompleteCallback(this, this._onFunctionRequestFinished);
+			this[request].apply(this, args);
+		}
+	},
+
+	/**
+	 * Render complete callback upon function request.
+	 * @private
+	 */
+	_onFunctionRequestFinished: function() {
+		this._isFunctionActive = false;
+		this._processFunctionRequest(); // process next request
+	},
+
+	/**
 	 * On attach event listener.
 	 * @private
 	 */
@@ -228,7 +307,8 @@ var BigCollectionView = Backbone.View.extend({
 					scrollbars: true,
 					mouseWheel: true,
 					interactiveScrollbars: true,
-					shrinkScrollbars: 'scale',
+					shrinkScrollbars: 'clip',
+					resizeScrollbars: this.resizeScrollbars,
 					// fadeScrollbars: true
 				});
 				this._scroll.on('scroll', this._onScroll.bind(this));
@@ -263,6 +343,25 @@ var BigCollectionView = Backbone.View.extend({
 	 */
 	_onScroll: function() {
 		this._requestFrame();
+		if (this.enableScrollEnd) {
+			this._isScrolling = true;
+			if (this._scrollEndTimer)
+				clearTimeout(this._scrollEndTimer);
+			this._scrollEndTimer = setTimeout(this._onScrollEnd.bind(this), 500);
+		}
+	},
+
+	/**
+	 * Called from timeout when scrolling has ended.
+	 * Fires onScrollEnd method on all visible views.
+	 * @private
+	 */
+	_onScrollEnd: function() {
+		this._isScrolling = false;
+		for (const [key, view] of this._views.entries()) {
+			if (view.onScrollEnd)
+				view.onScrollEnd.call(view);
+		}
 	},
 
 	/**
@@ -323,8 +422,7 @@ var BigCollectionView = Backbone.View.extend({
 			this._createEmptyView();
 		} else {
 			this._updateClientHeight();
-			var scrollTop = this.useIScroll ? (-this._scroll.y) : this.$el[0].scrollTop;
-			this._getVisibleItems(scrollTop, this.$el[0].scrollHeight, this.$el[0].clientHeight);
+			this._getVisibleItems();
 			// Update visible items
 			for (var index = this._visibleItems[0]; index <= this._visibleItems[1]; ++index) {
 				// Refresh item by index
@@ -363,7 +461,21 @@ var BigCollectionView = Backbone.View.extend({
 	 * Calculates visible items range.
 	 * @private
 	 */
-	_getVisibleItems: function(scrollTop, scrollHeight, clientHeight) {
+	_getVisibleItems: function() {
+		// Fix for scrolling to the last items
+		var clientHeight = this.$el[0].clientHeight;
+		var scrollTop;
+		if (this.useIScroll) {
+			scrollTop = Math.abs(this._scroll.y);
+			if (scrollTop > Math.abs(this._scroll.maxScrollY))
+				scrollTop = Math.abs(this._scroll.maxScrollY);
+		} else {
+			scrollTop = this.$el[0].scrollTop;
+			var scrollHeight = this.$el[0].scrollHeight;
+			if (scrollTop > scrollHeight - clientHeight)
+				scrollTop = Math.max(scrollHeight - clientHeight, 0);
+		}
+
 		var itemHeight = this._getEstimatedElementHeightWithOffset();
 		var threshold = this._getScrollThreshold();
 		var min = Math.floor((scrollTop - threshold) / itemHeight);
@@ -405,6 +517,7 @@ var BigCollectionView = Backbone.View.extend({
 			return;
 		var item = new childViewType({
 			model: model,
+			collectionView: this,
 		});
 		// Add element to DOM
 		item.render();
