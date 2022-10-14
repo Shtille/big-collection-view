@@ -213,6 +213,7 @@ var BigCollectionView = Backbone.View.extend({
 	 _scrollToElementByIndex: function(index, callback) {
 		if (index === null) return;
 		var position = index * this._getEstimatedElementHeightWithOffset();
+		position = this._fixScrollPosition(position);
 		if (this.useIScroll) {
 			this._scroll.scrollTo(0, -position);
 			if (callback !== null && callback !== undefined)
@@ -223,6 +224,26 @@ var BigCollectionView = Backbone.View.extend({
 				scrollTop: position,
 			}, 400, 'swing', callback);
 		}
+	},
+
+	/**
+	 * Fix for scrolling to the last items.
+	 * 
+	 * @param {Number} scrollTop  The scroll position.
+	 * @return {Number} The fixed scroll position.
+	 * @private
+	 */
+	_fixScrollPosition: function(scrollTop) {
+		if (this.useIScroll) {
+			if (scrollTop > Math.abs(this._scroll.maxScrollY))
+				scrollTop = Math.abs(this._scroll.maxScrollY);
+		} else {
+			var clientHeight = this.$el[0].clientHeight;
+			var scrollHeight = this.$el[0].scrollHeight;
+			if (scrollTop > scrollHeight - clientHeight)
+				scrollTop = Math.max(scrollHeight - clientHeight, 0);
+		}
+		return scrollTop;
 	},
 
 	/**
@@ -243,9 +264,16 @@ var BigCollectionView = Backbone.View.extend({
 	 * @private
 	 */
 	_fireRenderCompleteCallbacks: function() {
-		while (this._renderCallbackQueue.length > 0) {
-			var data = this._renderCallbackQueue.pop();
-			data.callback.call(data.context);
+		if (this._renderCallbackQueue.length > 0) {
+			// Callback queue might be modified during callback call, thus we store the size.
+			var i,n;
+			n = this._renderCallbackQueue.length;
+			for (i = 0; i < n; ++i) {
+				var data = this._renderCallbackQueue[i];
+				data.callback.call(data.context);
+			}
+			// Remove processed items from queue
+			this._renderCallbackQueue.splice(0, n);
 		}
 	},
 
@@ -257,7 +285,7 @@ var BigCollectionView = Backbone.View.extend({
 	_addFunctionRequest: function() {
 		const args = Array.from(arguments);
 		this._functionsQueue.push(args);
-		this._processFunctionRequest();// isFUnctionActive
+		this._processFunctionRequest();
 	},
 
 	/**
@@ -267,10 +295,13 @@ var BigCollectionView = Backbone.View.extend({
 	_processFunctionRequest: function() {
 		if (!this._isFunctionActive && this._functionsQueue.length > 0) {
 			this._isFunctionActive = true;
+			// Process the request
 			var request = this._functionsQueue.shift();
 			var args = request.splice(1);
-			this.addRenderCompleteCallback(this, this._onFunctionRequestFinished);
 			this[request].apply(this, args);
+			// Request frame
+			this.addRenderCompleteCallback(this, this._onFunctionRequestFinished);
+			this._requestFrame();
 		}
 	},
 
@@ -462,18 +493,12 @@ var BigCollectionView = Backbone.View.extend({
 	 * @private
 	 */
 	_getVisibleItems: function() {
-		// Fix for scrolling to the last items
 		var clientHeight = this.$el[0].clientHeight;
 		var scrollTop;
 		if (this.useIScroll) {
 			scrollTop = Math.abs(this._scroll.y);
-			if (scrollTop > Math.abs(this._scroll.maxScrollY))
-				scrollTop = Math.abs(this._scroll.maxScrollY);
 		} else {
 			scrollTop = this.$el[0].scrollTop;
-			var scrollHeight = this.$el[0].scrollHeight;
-			if (scrollTop > scrollHeight - clientHeight)
-				scrollTop = Math.max(scrollHeight - clientHeight, 0);
 		}
 
 		var itemHeight = this._getEstimatedElementHeightWithOffset();
