@@ -23,6 +23,7 @@ var BigCollectionView = Backbone.View.extend({
 		this._views = new Map(); // (index, Item) map
 		this._positionsMap = new Map(); // (index, position) map
 		this._heightsMap = new Map(); // (index, height) map
+		this._expandedHeightsMap = new Map(); // (index, height) map
 		this._indicesCache = new LRUCache({
 			capacity: 10,
 			context: this,
@@ -80,6 +81,13 @@ var BigCollectionView = Backbone.View.extend({
 	enableScrollEnd: false,
 
 	/**
+	 * Whether child view model stores expanded state.
+	 * If true new items will count expanded state for height.
+	 * Otherwise estimated height value will be used.
+	 */
+	modelStoresExpandedState: false,
+
+	/**
 	 * Child view class definition.
 	 * 
 	 * @param {Backbone.Model} model  The model.
@@ -127,26 +135,112 @@ var BigCollectionView = Backbone.View.extend({
 	_updatePositions: function() {
 		if (this.collection.length == 0)
 			return;
-		var position, height, view, heightOverdraft;
-		heightOverdraft = 0;
+		var position, height, view, heightOverdraft, estimatedHeight;
+		estimatedHeight = this._getEstimatedElementHeightWithOffset();
 		for (var index = this._visibleItems[0]; index <= this._visibleItems[1]; ++index) {
 			view = this._views.get(index);
 			height = this._getElementHeightWithOffset(view.$el);
 			this._heightsMap.set(index, height);
+			// Set expanded height items
+			if (height != estimatedHeight)
+				this._expandedHeightsMap.set(index, height);
+			else
+				this._expandedHeightsMap.delete(index);
 			if (index == this._visibleItems[0]) { // first item
-				position = this._positionsMap.get(index);
+				position = this._obtainItemPosition(index);
 			} else {
 				this._positionsMap.set(index, position);
 				view.$el.css('top', position);
 			}
 			position += height;
-			heightOverdraft += height - this._getEstimatedElementHeightWithOffset();
 		}
+		// Calculate summary height overdraft
+		heightOverdraft = 0;
+		this._expandedHeightsMap.forEach(function(value, key, map){
+			heightOverdraft += value - estimatedHeight;
+		}, this);
+		height = this.collection.length * estimatedHeight + heightOverdraft;
+		this._$content.css('height', height);
 		if (this.useIScroll) {
-			this._$content.css('height', this.collection.length * this._getEstimatedElementHeightWithOffset() + heightOverdraft);
 			this._scrollRefreshRequested = true;
 			this._requestFrame();
 		}
+	},
+
+	/**
+	 * Obtains item position by it's index.
+	 * 
+	 * @param {Number} index  The item index.
+	 * @return {Number} Item position.
+	 * @private
+	 */
+	_obtainItemPosition: function(index) {
+		// Get previous item position and height
+		var prevIndex = index - 1;
+		if (this._positionsMap.has(prevIndex)) { // exists in map
+			var prevPosition = this._positionsMap.get(prevIndex);
+			var prevHeight = this._heightsMap.get(prevIndex);
+			return prevPosition + prevHeight;
+		} else { // previous doesn't exist
+			// Count for expanded height overdraft
+			var heightOverdraft = 0;
+			var estimatedHeight = this._getEstimatedElementHeightWithOffset();
+			this._expandedHeightsMap.forEach(function(value, key, map){
+				if (key < index)
+					heightOverdraft += value - estimatedHeight;
+			}, this);
+			return index * estimatedHeight + heightOverdraft;
+		}
+	},
+
+	/**
+	 * Manually discards expanded state by model's ID and updates positions.
+	 * 
+	 * @param {String} id   The model's ID.
+	 */
+	discardExpandedStateById: function(id) {
+		this._addFunctionRequest('_discardExpandedStateById', id);
+	},
+
+	/**
+	 * Implements {@link discardExpandedStateById}.
+	 * 
+	 * @see discardExpandedStateById
+	 * @param {String} id   The model's ID.
+	 * @private
+	 */
+	_discardExpandedStateById: function(id) {
+		// We need to find model's index in collection by its ID.
+		var index = this.getIndexById(id);
+		if (index === null || !this._expandedHeightsMap.has(index)) {
+			this._updatePositions();
+			return;
+		}
+		this._expandedHeightsMap.delete(index);
+		// Update positions of items in cache
+		if (this._heightsMap.has(index)) {
+			// Update this item's height
+			this._heightsMap.set(index, this._getEstimatedElementHeightWithOffset());
+			// Update all positions (even non-visible)
+			// Since Map class stores items in insertion order we need to get the key range.
+			var maxIndex = 0;
+			this._positionsMap.forEach(function(value, key, map){
+				maxIndex = Math.max(maxIndex, key);
+			}, this);
+			var position, height, view;
+			for (var i = index; i <= maxIndex; ++i) {
+				view = this._views.get(i);
+				height = this._heightsMap.get(i);
+				if (i == index) {
+					position = this._positionsMap.get(i);
+				} else {
+					this._positionsMap.set(i, position);
+					view.$el.css('top', position);
+				}
+				position += height;
+			}
+		}
+		this._updatePositions();
 	},
 
 	/**
@@ -616,23 +710,30 @@ var BigCollectionView = Backbone.View.extend({
 		});
 		// Add element to DOM
 		item.render();
-		// Get previous item position and height
-		var prevIndex = index - 1;
-		var position;
-		if (this._positionsMap.has(prevIndex)) { // exists in map
-			var prevPosition = this._positionsMap.get(prevIndex);
-			var prevHeight = this._heightsMap.get(prevIndex);
-			position = prevPosition + prevHeight;
-		} else { // doesn't exist
-			position = index * this._getEstimatedElementHeightWithOffset();
-		}
-		var height = this._getEstimatedElementHeightWithOffset();
-		this._positionsMap.set(index, position);
-		this._heightsMap.set(index, height);
+		var position, height;
+		position = this._obtainItemPosition(index);
 		item.$el.css('top', position);
 		this._$content.append(item.$el);
 		// Add to storage
 		this._views.set(index, item);
+		// Store position and height
+		var estimatedHeight = this._getEstimatedElementHeightWithOffset();
+		if (this.modelStoresExpandedState) {
+			if (this._expandedHeightsMap.has(index)) {
+				height = this._expandedHeightsMap.get(index);
+			} else {
+				height = this._getElementHeightWithOffset(item.$el);
+			}
+		} else {
+			height = this._getElementHeightWithOffset(item.$el);
+		}
+		this._positionsMap.set(index, position);
+		this._heightsMap.set(index, height);
+		// Set expanded height items
+		if (height != estimatedHeight)
+			this._expandedHeightsMap.set(index, height);
+		else
+			this._expandedHeightsMap.delete(index);
 		// console.log('created item at ' + index);
 	},
 
@@ -654,6 +755,7 @@ var BigCollectionView = Backbone.View.extend({
 		this._indicesCache.clear();
 		this._positionsMap.clear();
 		this._heightsMap.clear();
+		this._expandedHeightsMap.clear();
 		this._renderCallbackQueue.length = 0;
 		// Clear DOM
 		if (this._$content)
