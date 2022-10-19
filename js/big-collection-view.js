@@ -175,6 +175,21 @@ var BigCollectionView = Backbone.View.extend({
 	},
 
 	/**
+	 * Gets item index by model's ID.
+	 * 
+	 * @param {String} id   The model's ID.
+	 * @return {Number} The index or null if haven't found.
+	 */
+	getIndexById: function(id) {
+		for (var i = 0; i < this.collection.length; ++i) {
+			if (this.collection.at(i).get('id') == id) {
+				return i;
+			}
+		}
+		return null;
+	},
+
+	/**
 	 * Scrolls to desired element with the given model ID.
 	 * Complexity: O(N), where N is collection length.
 	 * 
@@ -183,13 +198,7 @@ var BigCollectionView = Backbone.View.extend({
 	 */
 	scrollToElementById: function(id, callback) {
 		// We need to find model's index in collection by its ID.
-		var index = null;
-		for (var i = 0; i < this.collection.length; ++i) {
-			if (this.collection.at(i).get('id') == id) {
-				index = i;
-				break;
-			}
-		}
+		var index = this.getIndexById(id);
 		this.scrollToElementByIndex(index, callback);
 	},
 
@@ -244,6 +253,67 @@ var BigCollectionView = Backbone.View.extend({
 				scrollTop = Math.max(scrollHeight - clientHeight, 0);
 		}
 		return scrollTop;
+	},
+
+	/**
+	 * Makes item fully visible by model's ID.
+	 * 
+	 * @param {String} id  The model's ID.
+	 */
+	makeItemFullyVisibleById: function(id) {
+		// We need to find model's index in collection by its ID.
+		var index = this.getIndexById(id);
+		this.makeItemFullyVisibleByIndex(index);
+	},
+
+	/**
+	 * Makes item fully visible by index.
+	 * 
+	 * @param {Number} index  The index of item.
+	 */
+	makeItemFullyVisibleByIndex: function(index) {
+		this._addFunctionRequest('_makeItemFullyVisible', index);
+	},
+
+	/**
+	 * Checks if item is fully visible.
+	 * 
+	 * @param {Number} index  The item's index.
+	 * @return {Boolean} True if success and false otherwise.
+	 * @private
+	 */
+	_isItemFullyVisible: function(index) {
+		if (this._positionsMap.has(index)) {
+			var clientHeight = this.$el[0].clientHeight;
+			var scrollTop;
+			if (this.useIScroll) {
+				scrollTop = Math.abs(this._scroll.y);
+			} else {
+				scrollTop = this.$el[0].scrollTop;
+			}
+			var min = scrollTop;
+			var max = scrollTop + clientHeight;
+			var posMin = this._positionsMap.get(index);
+			var height = this._heightsMap.get(index);
+			var posMax = posMin + height;
+			return min <= posMin && posMin <= max &&
+				min <= posMax && posMax <= max;
+		} else {
+			return false;
+		}
+	},
+
+	/**
+	 * Makes item fully visible.
+	 * 
+	 * @param {Number} index  The index of item.
+	 * @private
+	 */
+	_makeItemFullyVisible: function(index) {
+		if (index === null)
+			return;
+		if (!this._isItemFullyVisible(index))
+			this._scrollToElementByIndex(index);
 	},
 
 	/**
