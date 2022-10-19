@@ -13,3 +13,6 @@ myList.render();
 function onButtonClick() {
 	myList.scrollToElementByIndex(9);
 }
+function onButtonRemoveClick() {
+	myCollection.remove(myCollection.at(4));
+}
